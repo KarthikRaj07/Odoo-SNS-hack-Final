@@ -7,7 +7,16 @@ import {
     signInWithPopup,
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { FiGoogle, FiMail, FiLock, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import { FcGoogle } from "react-icons/fc";
+
+import {
+  FiMail,
+  FiLock,
+  FiCheckCircle,
+  FiAlertCircle
+} from "react-icons/fi";
+
+
 
 const Login = () => {
     const navigate = useNavigate();
@@ -141,7 +150,7 @@ const Login = () => {
                     onClick={handleGoogleLogin}
                     className="w-full py-3 bg-white text-gray-900 font-bold rounded-xl hover:bg-gray-100 transition-all transform hover:scale-[1.02] flex items-center justify-center space-x-2 shadow-lg"
                 >
-                    <FiGoogle className="text-xl" />
+                    <FcGoogle className="text-xl" />
                     <span>Google</span>
                 </button>
 
