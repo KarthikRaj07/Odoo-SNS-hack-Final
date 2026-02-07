@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 require('dotenv').config();
 
+const coursesRoutes = require('./routes/courses');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -16,15 +18,14 @@ const io = new Server(server, {
     }
 });
 
-// Mock Data
-let courses = [
-    { id: 1, title: 'Introduction to React', instructor: 'John Doe', rating: 4.8, students: 120, image: 'https://placehold.co/600x400' },
-    { id: 2, title: 'Advanced NodeJS', instructor: 'Jane Smith', rating: 4.9, students: 85, image: 'https://placehold.co/600x400' },
-    { id: 3, title: 'UI/UX Design Principles', instructor: 'Bob Johnson', rating: 4.7, students: 200, image: 'https://placehold.co/600x400' }
-];
+// Routes
+app.use('/api/courses', coursesRoutes);
 
-let users = [];
+app.get('/', (req, res) => {
+    res.send('Server is running');
+});
 
+// Socket.io Logic
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
@@ -47,18 +48,9 @@ io.on('connection', (socket) => {
         io.to(data.to).emit('call-accepted', data.signal);
     });
 
-
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
-});
-
-app.get('/', (req, res) => {
-    res.send('Server is running');
-});
-
-app.get('/api/courses', (req, res) => {
-    res.json(courses);
 });
 
 const PORT = process.env.PORT || 5000;
