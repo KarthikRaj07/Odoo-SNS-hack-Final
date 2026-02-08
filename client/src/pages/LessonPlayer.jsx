@@ -121,7 +121,7 @@ const LessonPlayer = () => {
                             <div className="space-y-1">
                                 {module.lessons?.map((lesson) => {
                                     const isCompleted = completedLessons.includes(lesson.id);
-                                    const isActive = lesson.id === parseInt(lessonId);
+                                    const isActive = lesson.id === lessonId;
                                     return (
                                         <button
                                             key={lesson.id}
@@ -175,9 +175,11 @@ const LessonPlayer = () => {
 
                             if (currentLesson?.type === 'video') {
                                 const isBase64 = currentLesson.content_url?.startsWith('data:video');
+                                const isDirectVideo = currentLesson.content_url && (currentLesson.content_url.endsWith('.mp4') || currentLesson.content_url.endsWith('.webm') || currentLesson.content_url.endsWith('.ogg'));
+
                                 return (
                                     <div className="aspect-w-16 aspect-h-9 bg-black rounded-[40px] overflow-hidden shadow-2xl mb-8 border border-[#6D4C6A]/20 flex items-center justify-center">
-                                        {isBase64 ? (
+                                        {isBase64 || isDirectVideo ? (
                                             <video src={currentLesson.content_url} controls className="w-full h-full max-h-[600px] object-contain" />
                                         ) : (
                                             <iframe
@@ -202,6 +204,17 @@ const LessonPlayer = () => {
 
                             if (currentLesson?.type === 'document' || currentLesson?.type === 'pdf' || currentLesson?.type === 'html') {
                                 const isExternal = currentLesson.content_url && (currentLesson.content_url.startsWith('http') || currentLesson.content_url.startsWith('https')) && !currentLesson.content_url.toLowerCase().endsWith('.pdf');
+
+                                if (!currentLesson.content_url && currentLesson.text_content) {
+                                    return (
+                                        <div className="bg-[#1E111C] p-12 rounded-[40px] shadow-xl min-h-[400px] mb-8 border border-[#6D4C6A]/10 text-white">
+                                            <h1 className="text-3xl font-black mb-6 tracking-tight">{currentLesson?.title}</h1>
+                                            <div className="text-gray-300 leading-relaxed font-medium prose prose-invert max-w-none whitespace-pre-wrap">
+                                                {currentLesson.text_content}
+                                            </div>
+                                        </div>
+                                    );
+                                }
 
                                 if (isExternal) {
                                     return (

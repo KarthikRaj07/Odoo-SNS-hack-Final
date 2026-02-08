@@ -50,7 +50,7 @@ router.post('/:lessonId/submit', verifyToken, async (req, res) => {
 
         const passed = maxPoints > 0 ? (rawScore / maxPoints) >= 0.7 : true;
 
-        // 3. Check attempt number
+        // 3. Check attempt number (Note: Race condition possible without transactions)
         const { count: attemptCount, error: countError } = await supabase
             .from('quiz_attempts')
             .select('*', { count: 'exact', head: true })
@@ -61,17 +61,19 @@ router.post('/:lessonId/submit', verifyToken, async (req, res) => {
 
         const currentAttemptNum = (attemptCount || 0) + 1;
 
-        // 4. Calculate Points to Award based on Lesson Settings (Configurable Rewards)
-        // Fetch lesson settings first
+        // 4. Calculate Points to Award based on Lesson Settings
         const { data: lesson, error: lError } = await supabase
             .from('lessons')
             .select('settings')
             .eq('id', lessonId)
-            .single();
+            .maybeSingle();
+
+        if (lError) throw lError;
+        if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
 
         let pointsAwarded = 0;
         if (passed) {
-            const settings = lesson?.settings || {};
+            const settings = lesson.settings || {};
             const rewards = settings.rewards || { first: 100, second: 80, third: 60, other: 40 };
 
             let pointsToGive = rewards.other || 0;
@@ -79,9 +81,6 @@ router.post('/:lessonId/submit', verifyToken, async (req, res) => {
             else if (currentAttemptNum === 2) pointsToGive = rewards.second || 0;
             else if (currentAttemptNum === 3) pointsToGive = rewards.third || 0;
 
-            // Optional: Multiplier based on raw score percentage? 
-            // Mockup just shows "100 Points" etc. for attempt. 
-            // Let's assume you get the full reward if you pass.
             pointsAwarded = pointsToGive;
         }
 
@@ -96,14 +95,14 @@ router.post('/:lessonId/submit', verifyToken, async (req, res) => {
                 attempt_number: currentAttemptNum
             }])
             .select()
-            .single();
+            .maybeSingle();
 
         if (attemptError) throw attemptError;
 
         // 6. Update User Points & Badge Level
         if (pointsAwarded > 0) {
             // Only award if this is the first time they PASS
-            const { data: previousPass } = await supabase
+            const { data: previousPass, error: passError } = await supabase
                 .from('quiz_attempts')
                 .select('id')
                 .eq('user_id', uid)
@@ -112,24 +111,25 @@ router.post('/:lessonId/submit', verifyToken, async (req, res) => {
                 .neq('id', attempt.id)
                 .limit(1);
 
+            if (passError) throw passError;
+
             if (!previousPass || previousPass.length === 0) {
                 const { data: user, error: uError } = await supabase
                     .from('users')
                     .select('total_points')
                     .eq('id', uid)
-                    .single();
+                    .maybeSingle();
 
-                if (!uError) {
+                if (uError) throw uError;
+                if (user) {
                     const newTotal = (user.total_points || 0) + pointsAwarded;
-                    const { data: updatedUser } = await supabase
+                    await supabase
                         .from('users')
                         .update({
                             total_points: newTotal,
                             badge_level: determineBadge(newTotal)
                         })
-                        .eq('id', uid)
-                        .select()
-                        .single();
+                        .eq('id', uid);
                 }
             } else {
                 pointsAwarded = 0; // No points for repeat passes

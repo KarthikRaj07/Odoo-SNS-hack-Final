@@ -81,13 +81,23 @@ router.get('/:id', async (req, res) => {
         if (courseError) throw courseError;
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
+        // Increment views_count (background task, don't wait for it to block the response)
+        supabase
+            .from('courses')
+            .update({ views_count: (course.views_count || 0) + 1 })
+            .eq('id', id)
+            .then(({ error }) => {
+                if (error) console.error('Error incrementing views_count:', error);
+            });
+
         // Fetch modules and lessons (exclude large content fields to avoid 500 errors)
         const { data: modules, error: modulesError } = await supabase
             .from('modules')
             .select(`
                 *,
                 lessons(
-                    id, module_id, title, type, order_index, is_free, created_at, allow_download
+                    *,
+                    quiz_questions(id)
                 )
             `)
             .eq('course_id', id)

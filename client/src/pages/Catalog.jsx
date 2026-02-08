@@ -159,12 +159,20 @@ const Catalog = () => {
                 )}
 
                 {!loading && filteredCourses.length === 0 && (
-                    <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-                            <FiSearch className="text-gray-400 text-2xl" />
+                    <div className="text-center py-32 bg-white rounded-[40px] border border-dashed border-gray-100 shadow-sm max-w-2xl mx-auto">
+                        <div className="w-20 h-20 bg-gray-50 rounded-[30px] flex items-center justify-center text-gray-200 mx-auto mb-8">
+                            <FiBook size={40} />
                         </div>
-                        <h3 className="text-lg font-bold text-gray-800">No courses found</h3>
-                        <p className="text-gray-500 mt-2">Try adjusting your search terms</p>
+                        <h3 className="text-2xl font-black text-gray-800 tracking-tight">No published courses found</h3>
+                        <p className="text-gray-400 mt-4 max-w-sm mx-auto font-medium">We're still preparing our curriculum. Check back soon for exciting new content!</p>
+                        {getUser()?.role === 'admin' && (
+                            <button
+                                onClick={() => navigate('/admin/courses')}
+                                className="mt-10 px-8 py-4 bg-[#6D4C6A] text-white rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-[#5A3E57] transition-all"
+                            >
+                                Go to Management
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

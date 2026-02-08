@@ -1,1 +1,13 @@
 .env
+server/.env
+client/.env
+node_modules/
+temp_docx/
+dist/
+*.log
+LearnSphere (eLearning Platform).pdf
+E-learning Hackathon Mockup - 24 hours.excalidraw.svg
+seed_*.js
+check_*.js
+*.txt
+adminui.docx

@@ -17,9 +17,10 @@ router.post('/:id/complete', verifyToken, async (req, res) => {
             .select('*')
             .eq('user_id', uid)
             .eq('course_id', courseId)
-            .single();
+            .maybeSingle();
 
-        if (fetchError || !enrollment) {
+        if (fetchError) throw fetchError;
+        if (!enrollment) {
             return res.status(404).json({ error: 'Enrollment not found' });
         }
 
@@ -59,12 +60,14 @@ router.post('/:id/complete', verifyToken, async (req, res) => {
             // Certificate Issuance
             if (progress === 100) {
                 // Check if already has certificate
-                const { data: existingCert } = await supabase
+                const { data: existingCert, error: certFetchError } = await supabase
                     .from('certificates')
                     .select('id')
                     .eq('user_id', uid)
                     .eq('course_id', courseId)
-                    .single();
+                    .maybeSingle();
+
+                if (certFetchError) throw certFetchError;
 
                 if (!existingCert) {
                     await supabase

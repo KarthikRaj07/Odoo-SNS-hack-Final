@@ -1,15 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { FiUsers, FiBookOpen, FiDollarSign, FiActivity, FiFileText, FiMoon, FiMoreVertical, FiShare2, FiArrowRight, FiCheckCircle, FiClock, FiStar, FiChevronRight } from 'react-icons/fi';
+import { FiUsers, FiBookOpen, FiDollarSign, FiActivity, FiFileText, FiMoon, FiMoreVertical, FiShare2, FiArrowRight, FiCheckCircle, FiClock, FiStar, FiChevronRight, FiLogOut } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { getToken, getUser } from '../../utils/auth';
+import { getToken, getUser, clearAuth } from '../../utils/auth';
 import { supabase } from '../../supabase';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState({ totalUsers: 0, totalCourses: 0, totalEnrollments: 0, totalRevenue: 0 });
     const [loading, setLoading] = useState(true);
+
+    const handleLogout = () => {
+        clearAuth();
+        navigate('/login');
+    };
 
     useEffect(() => {
         fetchStats();
@@ -62,8 +67,14 @@ const AdminDashboard = () => {
                             </div>
                         ))}
                     </div>
-                    <button className="text-gray-400 hover:text-gray-600">
-                        <FiMoon size={20} />
+                    <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors">
+                        <FiLogOut size={20} />
+                    </button>
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="px-6 py-2 bg-gray-50 text-[#6D4C6A] rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-100 shadow-sm"
+                    >
+                        Learner View
                     </button>
                 </div>
             </header>

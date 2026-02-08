@@ -12,13 +12,16 @@ const requireAdmin = async (req, res, next) => {
             .from('users')
             .select('role')
             .eq('id', uid)
-            .single();
+            .maybeSingle();
 
         console.log(`DEBUG: requireAdmin check - uid: ${uid}, found user: ${!!user}, role: ${user?.role}`);
 
-        if (error || !user) {
-            console.log('DEBUG: requireAdmin - User not found or error');
-            return res.status(403).json({ error: 'Access denied: user not found in database', details: error?.message });
+        if (error) {
+            return res.status(500).json({ error: 'Database error', details: error.message });
+        }
+        if (!user) {
+            console.log('DEBUG: requireAdmin - User not found');
+            return res.status(403).json({ error: 'Access denied: user not found in database' });
         }
 
         if (user.role === 'admin' || user.role === 'instructor') {
@@ -51,9 +54,13 @@ const checkCourseOwnership = async (courseId, userId, userRole) => {
         .from('courses')
         .select('instructor_id')
         .eq('id', courseId)
-        .single();
-    if (error || !data) {
-        console.log(`DEBUG: checkCourseOwnership - Course not found or error: ${error?.message}`);
+        .maybeSingle();
+    if (error) {
+        console.error(`DEBUG: checkCourseOwnership - Database error: ${error.message}`);
+        return false;
+    }
+    if (!data) {
+        console.log(`DEBUG: checkCourseOwnership - Course not found`);
         return false;
     }
     const isOwner = data.instructor_id === userId;
@@ -99,7 +106,13 @@ router.get('/courses', async (req, res) => {
     try {
         let query = supabase
             .from('courses')
-            .select('*, instructor:users(full_name)')
+            .select(`
+                *,
+                instructor:users(full_name),
+                modules(
+                   lessons(id)
+                )
+            `)
             .order('created_at', { ascending: false });
 
         // If instructor, only show own courses
@@ -110,7 +123,17 @@ router.get('/courses', async (req, res) => {
         const { data, error } = await query;
 
         if (error) throw error;
-        res.json(data);
+
+        // Calculate lessons_count for each course
+        const coursesWithStats = data.map(course => {
+            const lessonsCount = course.modules?.reduce((acc, mod) => acc + (mod.lessons?.length || 0), 0) || 0;
+            return {
+                ...course,
+                lessons_count: lessonsCount
+            };
+        });
+
+        res.json(coursesWithStats);
     } catch (error) {
         console.error('Error fetching admin courses:', error);
         res.status(500).json({ error: 'Failed to fetch courses' });
@@ -119,7 +142,7 @@ router.get('/courses', async (req, res) => {
 
 // POST /api/admin/courses - Create new course
 router.post('/courses', async (req, res) => {
-    const { title, description, short_description, price, thumbnail_url, tags, is_published, visibility, access_rule } = req.body;
+    const { title, description, short_description, price, thumbnail_url, tags, is_published, visibility, access_rule, website } = req.body;
     const { uid } = req.user;
 
     if (!title) return res.status(400).json({ error: 'Title is required' });
@@ -137,6 +160,7 @@ router.post('/courses', async (req, res) => {
                 is_published: !!is_published,
                 visibility: visibility || 'everyone',
                 access_rule: access_rule || 'open',
+                website: website || '',
                 instructor_id: uid
             }])
             .select()
@@ -153,7 +177,7 @@ router.post('/courses', async (req, res) => {
 // PUT /api/admin/courses/:id - Update course
 router.put('/courses/:id', async (req, res) => {
     const { id } = req.params;
-    const { title, description, short_description, price, thumbnail_url, tags, is_published, visibility, access_rule } = req.body;
+    const { title, description, short_description, price, thumbnail_url, tags, is_published, visibility, access_rule, website } = req.body;
     const { uid, role } = req.user;
 
     try {
@@ -170,7 +194,8 @@ router.put('/courses/:id', async (req, res) => {
             tags,
             is_published,
             visibility,
-            access_rule
+            access_rule,
+            website
         };
 
         // Filter out undefined fields
@@ -245,7 +270,7 @@ router.post('/modules', async (req, res) => {
 
 // POST /api/admin/lessons - Create lesson
 router.post('/lessons', async (req, res) => {
-    const { module_id, title, type, content_url, text_content, order_index, is_free } = req.body;
+    const { module_id, title, type, content_url, text_content, order_index, is_free, attachments, settings, duration, allow_download } = req.body;
     const { uid, role } = req.user;
 
     if (!module_id || !title || !type) {
@@ -258,9 +283,10 @@ router.post('/lessons', async (req, res) => {
             .from('modules')
             .select('course_id')
             .eq('id', module_id)
-            .single();
+            .maybeSingle();
 
-        if (modError || !moduleData) return res.status(404).json({ error: 'Module not found' });
+        if (modError) throw modError;
+        if (!moduleData) return res.status(404).json({ error: 'Module not found' });
 
         if (!(await checkCourseOwnership(moduleData.course_id, uid, role))) {
             return res.status(403).json({ error: 'Not authorized to add lessons to this module' });
@@ -268,7 +294,7 @@ router.post('/lessons', async (req, res) => {
 
         const { data, error } = await supabase
             .from('lessons')
-            .insert([{ module_id, title, type, content_url, text_content, order_index, is_free }])
+            .insert([{ module_id, title, type, content_url, text_content, order_index, is_free, attachments, settings, duration, allow_download }])
             .select()
             .single();
         if (error) throw error;
@@ -284,11 +310,12 @@ router.get('/lessons/:id', async (req, res) => {
     const { uid, role } = req.user;
 
     try {
-        const { data: lesson, error: lError } = await supabase.from('lessons').select('*').eq('id', id).single();
-        if (lError || !lesson) return res.status(404).json({ error: 'Lesson not found' });
+        const { data: lesson, error: lError } = await supabase.from('lessons').select('*').eq('id', id).maybeSingle();
+        if (lError) throw lError;
+        if (!lesson) return res.status(404).json({ error: 'Lesson not found' });
 
         // Verify ownership
-        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lesson.module_id).single();
+        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lesson.module_id).maybeSingle();
         if (moduleData && !(await checkCourseOwnership(moduleData.course_id, uid, role))) {
             return res.status(403).json({ error: 'Not authorized' });
         }
@@ -305,7 +332,7 @@ router.get('/lessons/:id', async (req, res) => {
 // PUT /api/admin/lessons/:id - Update lesson (including settings)
 router.put('/lessons/:id', async (req, res) => {
     const { id } = req.params;
-    const { title, type, content_url, text_content, order_index, is_free, settings } = req.body;
+    const { title, type, content_url, text_content, order_index, is_free, settings, attachments, duration, allow_download } = req.body;
     const { uid, role } = req.user;
 
     try {
@@ -313,7 +340,7 @@ router.put('/lessons/:id', async (req, res) => {
         const { data: lessonData, error: lError } = await supabase.from('lessons').select('module_id').eq('id', id).single();
         if (lError || !lessonData) return res.status(404).json({ error: 'Lesson not found' });
 
-        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lessonData.module_id).single();
+        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lessonData.module_id).maybeSingle();
         if (!moduleData) return res.status(404).json({ error: 'Module not found' });
 
         if (!(await checkCourseOwnership(moduleData.course_id, uid, role))) {
@@ -322,7 +349,7 @@ router.put('/lessons/:id', async (req, res) => {
 
         const { data, error } = await supabase
             .from('lessons')
-            .update({ title, type, content_url, text_content, order_index, is_free, settings })
+            .update({ title, type, content_url, text_content, order_index, is_free, settings, attachments, duration, allow_download })
             .eq('id', id)
             .select()
             .single();
@@ -344,7 +371,7 @@ router.delete('/lessons/:id', async (req, res) => {
         const { data: lessonData, error: lError } = await supabase.from('lessons').select('module_id').eq('id', id).single();
         if (lError || !lessonData) return res.status(404).json({ error: 'Lesson not found' });
 
-        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lessonData.module_id).single();
+        const { data: moduleData } = await supabase.from('modules').select('course_id').eq('id', lessonData.module_id).maybeSingle();
 
         if (!(await checkCourseOwnership(moduleData.course_id, uid, role))) {
             return res.status(403).json({ error: 'Not authorized' });
@@ -515,20 +542,22 @@ router.post('/courses/:id/invite', async (req, res) => {
             .from('users')
             .select('id')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
-        if (userError || !user) {
+        if (userError) throw userError;
+        if (!user) {
             return res.status(404).json({ error: 'User not found with this email' });
         }
 
         // Check if already enrolled
-        const { data: existing } = await supabase
+        const { data: existing, error: existError } = await supabase
             .from('enrollments')
             .select('id')
             .eq('course_id', id)
             .eq('user_id', user.id)
-            .single();
+            .maybeSingle();
 
+        if (existError) throw existError;
         if (existing) {
             return res.status(400).json({ error: 'User is already enrolled' });
         }

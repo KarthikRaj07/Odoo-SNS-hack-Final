@@ -31,33 +31,36 @@ router.post('/', verifyToken, async (req, res) => {
 
     try {
         // Check if enrolled
-        const { data: enrollment } = await supabase
+        const { data: enrollment, error: enrollError } = await supabase
             .from('enrollments')
             .select('*')
             .eq('user_id', uid)
             .eq('course_id', courseId)
-            .single();
+            .maybeSingle();
 
+        if (enrollError) throw enrollError;
         if (!enrollment) {
             return res.status(403).json({ error: 'Must be enrolled to review' });
         }
 
         // Check if already reviewed
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
             .from('reviews')
             .select('*')
             .eq('user_id', uid)
             .eq('course_id', courseId)
-            .single();
+            .maybeSingle();
+
+        if (existingError) throw existingError;
 
         if (existing) {
-            // Update existing
+            // Update existing (Don't update created_at!)
             const { data, error } = await supabase
                 .from('reviews')
-                .update({ rating, comment, created_at: new Date() })
+                .update({ rating, comment, updated_at: new Date().toISOString() })
                 .eq('id', existing.id)
                 .select()
-                .single();
+                .maybeSingle();
             if (error) throw error;
             return res.json(data);
         }
